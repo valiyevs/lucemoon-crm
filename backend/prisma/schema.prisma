@@ -1,0 +1,190 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Using String instead of enums for SQLite compatibility
+// Role: ADMIN, MANAGER, SALESMAN
+// LeadStatus: NEW, CONTACTED, QUALIFIED, PROPOSAL, NEGOTIATION, WON, LOST
+// OrderStatus: PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+// InvoiceStatus: DRAFT, SENT, PAID, OVERDUE, CANCELLED
+
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  password  String
+  firstName String
+  lastName  String
+  role      String    @default("SALESMAN") // ADMIN, MANAGER, SALESMAN
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  leads     Lead[]
+  quotes    Quote[]
+  orders    Order[]
+}
+
+model Account {
+  id        Int       @id @default(autoincrement())
+  name      String
+  type      String    // Company, Individual
+  industry  String?
+  phone     String?
+  email     String?
+  address   String?
+  city      String?
+  country   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  contacts  Contact[]
+  leads     Lead[]
+  quotes    Quote[]
+  orders    Order[]
+}
+
+model Contact {
+  id          Int       @id @default(autoincrement())
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  position    String?
+  isPrimary   Boolean   @default(false)
+  accountId   Int
+  account     Account   @relation(fields: [accountId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  quotes      Quote[]
+  orders      Order[]
+}
+
+model Lead {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  value       Float?
+  status      String    @default("NEW") // NEW, CONTACTED, QUALIFIED, PROPOSAL, NEGOTIATION, WON, LOST
+  source      String?   // Website, Referral, Campaign, etc.
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  accountId   Int?
+  account     Account?  @relation(fields: [accountId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  quotes      Quote[]
+}
+
+model Product {
+  id          Int       @id @default(autoincrement())
+  sku         String    @unique
+  name        String
+  description String?
+  category    String    // Kablolar, Pəncərə, Şöförlər, Avadanlıqlar, etc.
+  unit        String    // ədəd, metr, kiloqram
+  price       Float
+  costPrice   Float?
+  stock       Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  quoteItems  QuoteItem[]
+  orderItems  OrderItem[]
+}
+
+model Quote {
+  id          Int       @id @default(autoincrement())
+  quoteNumber String    @unique
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  accountId   Int?
+  account     Account?  @relation(fields: [accountId], references: [id])
+  contactId   Int?
+  contact     Contact?  @relation(fields: [contactId], references: [id])
+  leadId      Int?
+  lead        Lead?     @relation(fields: [leadId], references: [id])
+  status      String    @default("DRAFT") // DRAFT, SENT, ACCEPTED, REJECTED
+  subtotal    Float
+  taxRate     Float     @default(0)
+  taxAmount   Float     @default(0)
+  total       Float
+  notes       String?
+  validUntil  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items       QuoteItem[]
+  order       Order?
+}
+
+model QuoteItem {
+  id        Int     @id @default(autoincrement())
+  quoteId   Int
+  quote     Quote   @relation(fields: [quoteId], references: [id])
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Float
+  total     Float
+}
+
+model Order {
+  id            Int       @id @default(autoincrement())
+  orderNumber   String    @unique
+  userId        Int
+  user          User      @relation(fields: [userId], references: [id])
+  accountId     Int
+  account       Account   @relation(fields: [accountId], references: [id])
+  contactId     Int?
+  contact       Contact?  @relation(fields: [contactId], references: [id])
+  quoteId       Int?      @unique
+  quote         Quote?    @relation(fields: [quoteId], references: [id])
+  status        String    @default("PENDING") // PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  subtotal      Float
+  taxRate       Float     @default(0)
+  taxAmount     Float     @default(0)
+  total         Float
+  shippingAddress String?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  items         OrderItem[]
+  invoices      Invoice[]
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Float
+  total     Float
+}
+
+model Invoice {
+  id          Int       @id @default(autoincrement())
+  invoiceNumber String  @unique
+  orderId     Int
+  order       Order    @relation(fields: [orderId], references: [id])
+  status      String    @default("DRAFT") // DRAFT, SENT, PAID, OVERDUE, CANCELLED
+  issueDate   DateTime  @default(now())
+  dueDate     DateTime?
+  subtotal    Float
+  taxRate     Float     @default(0)
+  taxAmount   Float     @default(0)
+  total       Float
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
