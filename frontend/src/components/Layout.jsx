@@ -53,31 +53,28 @@ export default function Layout({ children }) {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed lg:relative z-50 lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} lg:${sidebarOpen ? 'w-64' : 'w-20'} w-64 h-full bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 flex flex-col`}>
+      <aside className={`fixed lg:relative z-50 lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} w-64 h-full bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 flex flex-col overflow-y-auto`}>
         {/* Logo */}
-        <div className="p-5 flex items-center justify-between border-b border-slate-700/50">
-          {sidebarOpen ? (
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center font-bold text-lg">
-                LC
-              </div>
-              <div>
-                <h1 className="font-bold text-lg leading-tight">Lucemoon</h1>
-                <p className="text-xs text-slate-400">CRM Sistem</p>
-              </div>
-            </div>
-          ) : (
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center font-bold text-lg mx-auto">
+        <div className="p-4 flex items-center justify-between border-b border-slate-700/50 min-h-[72px]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center font-bold text-lg flex-shrink-0">
               LC
             </div>
-          )}
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-slate-700 rounded-lg transition">
-            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+            <div className="overflow-hidden">
+              <h1 className="font-bold text-lg leading-tight whitespace-nowrap">Lucemoon</h1>
+              <p className="text-xs text-slate-400 whitespace-nowrap">CRM Sistem</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-2 hover:bg-slate-700 rounded-lg transition flex-shrink-0"
+          >
+            <X size={18} />
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon
             const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path))
@@ -85,30 +82,29 @@ export default function Layout({ children }) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                onClick={() => setSidebarOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm ${
                   isActive
                     ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/25'
                     : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
                 }`}
               >
-                <Icon size={20} />
-                {sidebarOpen && <span className="font-medium">{item.label}</span>}
+                <Icon size={20} className="flex-shrink-0" />
+                <span className="font-medium truncate">{item.label}</span>
               </Link>
             )
           })}
 
           {/* Admin Section */}
           {user?.role === 'ADMIN' && (
-            <div className="pt-4 mt-4 border-t border-slate-700/50">
-              {sidebarOpen && (
-                <button
-                  onClick={() => setUsersOpen(!usersOpen)}
-                  className="flex items-center gap-2 text-slate-400 text-sm mb-2 px-4 hover:text-white transition"
-                >
-                  {usersOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  İdarəetmə
-                </button>
-              )}
+            <div className="pt-3 mt-3 border-t border-slate-700/50">
+              <button
+                onClick={() => setUsersOpen(!usersOpen)}
+                className="flex items-center gap-2 text-slate-400 text-xs mb-2 px-3 hover:text-white transition w-full"
+              >
+                {usersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <span className="whitespace-nowrap">İdarəetmə</span>
+              </button>
               {adminItems.map((item) => {
                 const Icon = item.icon
                 const isActive = location.pathname === item.path
@@ -116,14 +112,15 @@ export default function Layout({ children }) {
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm ${
                       isActive
                         ? 'bg-slate-700 text-white'
                         : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
                     }`}
                   >
-                    <Icon size={18} />
-                    {sidebarOpen && <span className="text-sm">{item.label}</span>}
+                    <Icon size={18} className="flex-shrink-0" />
+                    <span className="truncate">{item.label}</span>
                   </Link>
                 )
               })}
