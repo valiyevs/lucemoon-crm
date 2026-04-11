@@ -165,7 +165,6 @@ export default function Layout({ children }) {
               >
                 <Menu size={20} />
               </button>
-              <div>
               <h2 className="text-xl font-semibold text-slate-800">
                 {navItems.find(item => location.pathname === item.path)?.label ||
                  adminItems.find(item => location.pathname === item.path)?.label ||
