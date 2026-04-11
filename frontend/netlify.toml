@@ -3,7 +3,7 @@
   publish = "dist"
 
 [build.environment]
-  VITE_API_URL = ""
+  VITE_API_URL = "https://lucemoon-crm-backend-2.onrender.com/api"
 
 [[redirects]]
   from = "/*"
