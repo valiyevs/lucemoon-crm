@@ -38,3 +38,6 @@ prisma/migrations/
 
 # Misc
 *.tgz
+
+# Local Netlify folder
+.netlify

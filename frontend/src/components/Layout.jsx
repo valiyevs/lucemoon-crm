@@ -39,13 +39,21 @@ const adminItems = [
 export default function Layout({ children }) {
   const { user, logout } = useAuth()
   const location = useLocation()
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
 
   return (
     <div className="flex h-screen bg-slate-50">
+      {/* Mobile Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 flex flex-col`}>
+      <aside className={`fixed lg:relative z-50 lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} lg:${sidebarOpen ? 'w-64' : 'w-20'} w-64 h-full bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 flex flex-col`}>
         {/* Logo */}
         <div className="p-5 flex items-center justify-between border-b border-slate-700/50">
           {sidebarOpen ? (
@@ -149,11 +157,18 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto lg:ml-0">
         {/* Top Bar */}
-        <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-10">
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-10">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden p-2 hover:bg-slate-100 rounded-lg transition"
+              >
+                <Menu size={20} />
+              </button>
+              <div>
               <h2 className="text-xl font-semibold text-slate-800">
                 {navItems.find(item => location.pathname === item.path)?.label ||
                  adminItems.find(item => location.pathname === item.path)?.label ||

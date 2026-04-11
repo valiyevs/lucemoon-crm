@@ -96,8 +96,8 @@ export default function Dashboard() {
         <p className="text-slate-500">Satış fəaliyyətinizi izləyin və idarə edin</p>
       </div>
 
-      {/* Stats Cards - Horizontal */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      {/* Stats Cards - Responsive */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-6">
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -159,8 +159,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Main Charts */}
-      <div className="grid grid-cols-3 gap-5 mb-6">
+      {/* Main Charts - Responsive */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
         {/* Revenue Chart */}
         <Card className="col-span-2 p-6">
           <div className="flex items-center justify-between mb-6">
@@ -223,10 +223,10 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Bottom Section */}
-      <div className="grid grid-cols-3 gap-5">
+      {/* Bottom Section - Responsive */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Recent Leads */}
-        <Card className="col-span-2 p-6">
+        <Card className="col-span-1 lg:col-span-2 p-6">
           <div className="flex items-center justify-between mb-5">
             <div>
               <h3 className="text-lg font-semibold text-slate-800">Son Lead-lər</h3>
