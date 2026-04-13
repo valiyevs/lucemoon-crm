@@ -2,71 +2,172 @@ const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const { auth } = require('../middleware/auth');
+const { body, param, validationResult } = require('express-validator');
 
 const prisma = new PrismaClient();
 
+const VALID_STATUSES = ['NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
+
+// Validation middleware
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+  }
+  next();
+};
+
+// GET /api/leads - List all leads
 router.get('/', auth, async (req, res) => {
   try {
-    const { status, userId } = req.query;
+    const { status, userId, search } = req.query;
     const where = {};
+
     if (status) where.status = status;
     if (userId) where.userId = parseInt(userId);
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } }
+      ];
+    }
 
     const leads = await prisma.lead.findMany({
       where,
-      include: { account: true, user: { select: { id: true, firstName: true, lastName: true } } },
+      include: {
+        account: true,
+        user: { select: { id: true, firstName: true, lastName: true } }
+      },
       orderBy: { createdAt: 'desc' }
     });
     res.json(leads);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('GET /api/leads error:', err);
+    res.status(500).json({ error: 'Failed to fetch leads' });
   }
 });
 
-router.get('/:id', auth, async (req, res) => {
+// GET /api/leads/:id - Get single lead
+router.get('/:id',
+  auth,
+  param('id').isInt().withMessage('ID must be a number'),
+  validate,
+  async (req, res) => {
+    try {
+      const lead = await prisma.lead.findUnique({
+        where: { id: parseInt(req.params.id) },
+        include: {
+          account: true,
+          user: true,
+          quotes: { include: { items: true } }
+        }
+      });
+      if (!lead) return res.status(404).json({ error: 'Lead not found' });
+      res.json(lead);
+    } catch (err) {
+      console.error('GET /api/leads/:id error:', err);
+      res.status(500).json({ error: 'Failed to fetch lead' });
+    }
+  }
+);
+
+// POST /api/leads - Create lead
+router.post('/',
+  auth,
+  body('title').notEmpty().withMessage('Title is required'),
+  body('status').optional().isIn(VALID_STATUSES),
+  body('value').optional().isFloat({ min: 0 }).withMessage('Value must be a positive number'),
+  body('accountId').optional().isInt().withMessage('Account ID must be a number'),
+  validate,
+  async (req, res) => {
+    try {
+      const lead = await prisma.lead.create({
+        data: { ...req.body, userId: req.user.id },
+        include: { account: true, user: true }
+      });
+      res.status(201).json(lead);
+    } catch (err) {
+      console.error('POST /api/leads error:', err);
+      if (err.code === 'P2003') {
+        return res.status(400).json({ error: 'Invalid user or account ID' });
+      }
+      res.status(500).json({ error: 'Failed to create lead' });
+    }
+  }
+);
+
+// PUT /api/leads/:id - Update lead
+router.put('/:id',
+  auth,
+  param('id').isInt().withMessage('ID must be a number'),
+  body('status').optional().isIn(VALID_STATUSES),
+  body('value').optional().isFloat({ min: 0 }).withMessage('Value must be a positive number'),
+  body('accountId').optional().isInt().withMessage('Account ID must be a number'),
+  validate,
+  async (req, res) => {
+    try {
+      const lead = await prisma.lead.update({
+        where: { id: parseInt(req.params.id) },
+        data: req.body,
+        include: { account: true, user: true }
+      });
+      res.json(lead);
+    } catch (err) {
+      console.error('PUT /api/leads/:id error:', err);
+      if (err.code === 'P2025') {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+      if (err.code === 'P2003') {
+        return res.status(400).json({ error: 'Invalid user or account ID' });
+      }
+      res.status(500).json({ error: 'Failed to update lead' });
+    }
+  }
+);
+
+// DELETE /api/leads/:id - Delete lead
+router.delete('/:id',
+  auth,
+  param('id').isInt().withMessage('ID must be a number'),
+  validate,
+  async (req, res) => {
+    try {
+      await prisma.lead.delete({ where: { id: parseInt(req.params.id) } });
+      res.json({ message: 'Lead deleted successfully' });
+    } catch (err) {
+      console.error('DELETE /api/leads/:id error:', err);
+      if (err.code === 'P2025') {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+      res.status(500).json({ error: 'Failed to delete lead' });
+    }
+  }
+);
+
+// GET /api/leads/stats/summary - Get lead statistics
+router.get('/stats/summary', auth, async (req, res) => {
   try {
-    const lead = await prisma.lead.findUnique({
-      where: { id: parseInt(req.params.id) },
-      include: { account: true, user: true, quotes: true }
+    const [total, byStatus] = await Promise.all([
+      prisma.lead.count(),
+      prisma.lead.groupBy({
+        by: ['status'],
+        _count: true,
+      })
+    ]);
+
+    const totalValue = await prisma.lead.aggregate({
+      _sum: { value: true },
+      where: { status: 'WON' }
     });
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
-    res.json(lead);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
-router.post('/', auth, async (req, res) => {
-  try {
-    const lead = await prisma.lead.create({
-      data: { ...req.body, userId: req.user.id },
-      include: { account: true, user: true }
+    res.json({
+      total,
+      totalValue: totalValue._sum.value || 0,
+      byStatus: byStatus.map(s => ({ status: s.status, count: s._count }))
     });
-    res.status(201).json(lead);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.put('/:id', auth, async (req, res) => {
-  try {
-    const lead = await prisma.lead.update({
-      where: { id: parseInt(req.params.id) },
-      data: req.body,
-      include: { account: true, user: true }
-    });
-    res.json(lead);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.delete('/:id', auth, async (req, res) => {
-  try {
-    await prisma.lead.delete({ where: { id: parseInt(req.params.id) } });
-    res.json({ message: 'Lead deleted' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('GET /api/leads/stats/summary error:', err);
+    res.status(500).json({ error: 'Failed to fetch statistics' });
   }
 });
 

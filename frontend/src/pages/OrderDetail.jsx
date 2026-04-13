@@ -19,32 +19,68 @@ export default function OrderDetail() {
   const navigate = useNavigate()
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => { fetchOrder() }, [id])
 
   const fetchOrder = async () => {
-    try { const res = await api.get(`/orders/${id}`); setOrder(res.data) }
-    catch (err) { console.error(err) }
-    finally { setLoading(false) }
+    try {
+      setError(null)
+      const res = await api.get(`/orders/${id}`)
+      setOrder(res.data)
+    } catch (err) {
+      console.error('Fetch error:', err)
+      setError('Sifariş yüklənə bilmədi')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const updateStatus = async (status) => {
     try {
+      setActionLoading(true)
       await api.put(`/orders/${id}`, { status })
+      setError(null)
       fetchOrder()
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error('Update error:', err)
+      setError('Status yenilənə bilmədi')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const createInvoice = async () => {
     try {
+      setActionLoading(true)
       await api.post('/invoices', { orderId: order.id })
-      alert('Faktura yaradildi!')
+      setError(null)
       navigate('/invoices')
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error('Create invoice error:', err)
+      setError('Faktura yaradıla bilmədi')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
-  if (loading) return <Layout><Loading /></Layout>
-  if (!order) return <Layout><p>Sifaris tapilmadi</p></Layout>
+  if (loading) return (
+    <Layout>
+      <div className="flex items-center justify-center py-20">
+        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    </Layout>
+  )
+
+  if (!order) return (
+    <Layout>
+      <div className="text-center py-20">
+        <p className="text-slate-500">Sifariş tapılmadı</p>
+        <Button variant="secondary" onClick={() => navigate('/orders')} className="mt-4">Geriyə qayıt</Button>
+      </div>
+    </Layout>
+  )
 
   return (
     <Layout>
@@ -65,16 +101,24 @@ export default function OrderDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={order.status} onChange={e => updateStatus(e.target.value)} className="w-40">
-            <option value="PENDING">Gozleyir</option>
-            <option value="CONFIRMED">Tesdiqlenib</option>
-            <option value="PROCESSING">Islenilir</option>
-            <option value="SHIPPED">Gonderilib</option>
-            <option value="DELIVERED">Catdirilib</option>
-            <option value="CANCELLED">Legv edilib</option>
+          <Select value={order.status} onChange={e => updateStatus(e.target.value)} className="w-40" disabled={actionLoading}>
+            <option value="PENDING">Gözləyir</option>
+            <option value="CONFIRMED">Təsdiqlənib</option>
+            <option value="PROCESSING">İşlənilir</option>
+            <option value="SHIPPED">Göndərilib</option>
+            <option value="DELIVERED">Çatdırılıb</option>
+            <option value="CANCELLED">Ləğv edilib</option>
           </Select>
         </div>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-6">
         {/* Items */}

@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState({ leads: 0, quotes: 0, orders: 0, invoices: 0 })
   const [recentLeads, setRecentLeads] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     fetchDashboardData()
@@ -19,6 +20,7 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
+      setError(null)
       const [leadsRes, quotesRes, ordersRes, invoicesRes] = await Promise.all([
         api.get('/leads'),
         api.get('/quotes'),
@@ -26,19 +28,56 @@ export default function Dashboard() {
         api.get('/invoices'),
       ])
 
+      const leads = leadsRes.data || []
+      const quotes = quotesRes.data || []
+      const orders = ordersRes.data || []
+      const invoices = invoicesRes.data || []
+
+      // Calculate real stats
+      const activeLeads = leads.filter(l => !['WON', 'LOST'].includes(l.status)).length
+      const pendingQuotes = quotes.filter(q => q.status === 'DRAFT' || q.status === 'SENT').length
+      const activeOrders = orders.filter(o => !['DELIVERED', 'CANCELLED'].includes(o.status)).length
+      const paidInvoices = invoices.filter(i => i.status === 'PAID').length
+      const totalRevenue = invoices.filter(i => i.status === 'PAID').reduce((sum, i) => sum + (i.total || 0), 0)
+
       setStats({
-        leads: leadsRes.data.length,
-        quotes: quotesRes.data.length,
-        orders: ordersRes.data.length,
-        invoices: invoicesRes.data.length,
+        leads: activeLeads,
+        quotes: pendingQuotes,
+        orders: activeOrders,
+        invoices: paidInvoices,
+        totalRevenue,
+        totalLeads: leads.length,
+        totalQuotes: quotes.length,
+        totalOrders: orders.length,
+        totalInvoices: invoices.length,
       })
-      setRecentLeads(leadsRes.data.slice(0, 5))
+
+      // Pipeline data from real leads
+      const pipelineData = [
+        { stage: 'Yeni', count: leads.filter(l => l.status === 'NEW').length, color: '#3b82f6' },
+        { stage: 'Əlaqə', count: leads.filter(l => l.status === 'CONTACTED').length, color: '#f59e0b' },
+        { stage: 'Keyfiyyetli', count: leads.filter(l => l.status === 'QUALIFIED').length, color: '#8b5cf6' },
+        { stage: 'Təklif', count: leads.filter(l => l.status === 'PROPOSAL').length, color: '#06b6d4' },
+        { stage: 'Danışıq', count: leads.filter(l => l.status === 'NEGOTIATION').length, color: '#f97316' },
+      ]
+
+      setPipelineData(pipelineData)
+      setRecentLeads(leads.slice(0, 5))
     } catch (err) {
-      console.error(err)
+      console.error('Dashboard fetch error:', err)
+      setError('Məlumatları yükləyə bilmədi')
     } finally {
       setLoading(false)
     }
   }
+
+  const [pipelineData, setPipelineData] = useState([
+    { stage: 'Yeni', count: 0, color: '#3b82f6' },
+    { stage: 'Əlaqə', count: 0, color: '#f59e0b' },
+    { stage: 'Keyfiyyetli', count: 0, color: '#8b5cf6' },
+    { stage: 'Təklif', count: 0, color: '#06b6d4' },
+    { stage: 'Danışıq', count: 0, color: '#f97316' },
+  ])
 
   const revenueData = [
     { name: 'Yan', value: 45000 },
@@ -47,23 +86,6 @@ export default function Dashboard() {
     { name: 'Apr', value: 61000 },
     { name: 'May', value: 55000 },
     { name: 'Iyn', value: 67000 },
-  ]
-
-  const pipelineData = [
-    { stage: 'Yeni', count: 12, color: '#3b82f6' },
-    { stage: 'Əlaqə', count: 8, color: '#f59e0b' },
-    { stage: 'Keyfiyyetli', count: 6, color: '#8b5cf6' },
-    { stage: 'Təklif', count: 4, color: '#06b6d4' },
-    { stage: 'Danışıq', count: 3, color: '#f97316' },
-  ]
-
-  const statusDistribution = [
-    { name: 'Yeni', value: 15 },
-    { name: 'Əlaqə', value: 25 },
-    { name: 'Keyfiyyetli', value: 20 },
-    { name: 'Təklif', value: 18 },
-    { name: 'Danışıq', value: 12 },
-    { name: 'Qazanan', value: 10 },
   ]
 
   const leadStatusBadge = (status) => {
@@ -103,8 +125,8 @@ export default function Dashboard() {
             <div>
               <p className="text-sm text-slate-500">Aktiv Lead-lər</p>
               <p className="text-3xl font-bold text-slate-800">{stats.leads}</p>
-              <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-                <TrendingUp size={12} /> +12% bu ay
+              <p className="text-xs text-slate-500 mt-1">
+                Cəmi: {stats.totalLeads || 0}
               </p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -118,8 +140,8 @@ export default function Dashboard() {
             <div>
               <p className="text-sm text-slate-500">Gözləyən Təkliflər</p>
               <p className="text-3xl font-bold text-slate-800">{stats.quotes}</p>
-              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                <Clock size={12} /> 3 vaxt keçib
+              <p className="text-xs text-slate-500 mt-1">
+                Cəmi: {stats.totalQuotes || 0}
               </p>
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
@@ -133,8 +155,8 @@ export default function Dashboard() {
             <div>
               <p className="text-sm text-slate-500">Aktiv Sifarişlər</p>
               <p className="text-3xl font-bold text-slate-800">{stats.orders}</p>
-              <p className="text-xs text-cyan-600 mt-1 flex items-center gap-1">
-                <CheckCircle size={12} /> 2 göndərilib
+              <p className="text-xs text-slate-500 mt-1">
+                Cəmi: {stats.totalOrders || 0}
               </p>
             </div>
             <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
@@ -148,8 +170,8 @@ export default function Dashboard() {
             <div>
               <p className="text-sm text-slate-500">Ödənilmiş Fakturalar</p>
               <p className="text-3xl font-bold text-slate-800">{stats.invoices}</p>
-              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                <DollarSign size={12} /> 145,500 ₼
+              <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                <span className="font-medium">{(stats.totalRevenue || 0).toLocaleString('az-AZ')} ₼</span>
               </p>
             </div>
             <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">

@@ -24,9 +24,12 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  leads     Lead[]
-  quotes    Quote[]
-  orders    Order[]
+  leads          Lead[]
+  quotes         Quote[]
+  orders         Order[]
+  assignedTasks  Task[]      @relation("TaskAssignedUser")
+  createdTasks   Task[]      @relation("TaskCreator")
+  auditLogs      AuditLog[]  @relation("AuditLogUser")
 }
 
 model Account {
@@ -80,6 +83,7 @@ model Lead {
   updatedAt   DateTime  @updatedAt
 
   quotes      Quote[]
+  tasks       Task[]
 }
 
 model Product {
@@ -123,6 +127,7 @@ model Quote {
 
   items       QuoteItem[]
   order       Order?
+  tasks       Task[]
 }
 
 model QuoteItem {
@@ -159,6 +164,7 @@ model Order {
 
   items         OrderItem[]
   invoices      Invoice[]
+  tasks         Task[]
 }
 
 model OrderItem {
@@ -187,4 +193,38 @@ model Invoice {
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model Task {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  status      String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+  priority    String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  dueDate     DateTime?
+  leadId      Int?
+  lead        Lead?     @relation(fields: [leadId], references: [id])
+  quoteId     Int?
+  quote       Quote?    @relation(fields: [quoteId], references: [id])
+  orderId     Int?
+  order       Order?    @relation(fields: [orderId], references: [id])
+  assignedTo  Int?
+  assignedUser User?    @relation("TaskAssignedUser", fields: [assignedTo], references: [id])
+  createdBy   Int
+  creator     User      @relation("TaskCreator", fields: [createdBy], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+}
+
+model AuditLog {
+  id          Int       @id @default(autoincrement())
+  action      String    // CREATE, UPDATE, DELETE
+  entityType  String    // Lead, Quote, Order, Invoice, Account, Contact, Product, User
+  entityId    Int
+  userId      Int
+  user        User      @relation("AuditLogUser", fields: [userId], references: [id])
+  changes     String?   // JSON string of changes
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
 }

@@ -11,37 +11,68 @@ export default function Contacts() {
   const [showForm, setShowForm] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', phone: '', position: '', isPrimary: false, accountId: '' })
+  const [error, setError] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
 
   useEffect(() => { fetchContacts(); fetchAccounts() }, [])
 
   const fetchContacts = async () => {
     try {
+      setError(null)
       const res = await api.get('/contacts')
-      setContacts(res.data)
-    } catch (err) { console.error(err) }
-    finally { setLoading(false) }
+      setContacts(res.data || [])
+    } catch (err) {
+      console.error('Fetch error:', err)
+      setError('Məlumatları yükləyə bilmədi')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const fetchAccounts = async () => {
-    try { const res = await api.get('/accounts'); setAccounts(res.data) }
-    catch (err) { console.error(err) }
+    try {
+      const res = await api.get('/accounts')
+      setAccounts(res.data || [])
+    } catch (err) {
+      console.error('Fetch accounts error:', err)
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+      setError('Ad və Soyad daxil edin')
+      return
+    }
     try {
       await api.post('/contacts', formData)
       setShowForm(false)
       setFormData({ firstName: '', lastName: '', email: '', phone: '', position: '', isPrimary: false, accountId: '' })
+      setError(null)
       fetchContacts()
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error('Submit error:', err)
+      setError(err.message || 'Kontakt əlavə edilə bilmədi')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Bu kontaktı silmək istəyirsiniz?')) return
+    try {
+      setDeletingId(id)
+      await api.delete(`/contacts/${id}`)
+      fetchContacts()
+    } catch (err) {
+      console.error('Delete error:', err)
+      alert('Silinə bilmədi: ' + (err.message || 'Xəta baş verdi'))
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const filteredContacts = contacts.filter(c =>
     `${c.firstName} ${c.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   )
-
-  if (loading) return <Layout><Loading /></Layout>
 
   return (
     <Layout>
@@ -50,10 +81,25 @@ export default function Contacts() {
           <h1 className="text-2xl font-bold text-slate-800">Kontaktlar</h1>
           <p className="text-slate-500 text-sm mt-1">{contacts.length} şəxs qeydə alınıb</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} icon={Plus}>
+        <Button onClick={() => { setShowForm(!showForm); setError(null) }} icon={Plus}>
           {showForm ? 'Bagla' : '+ Yeni Kontakt'}
         </Button>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
 
       {showForm && (
         <Card className="mb-6 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
@@ -94,7 +140,16 @@ export default function Contacts() {
       ) : (
         <div className="grid grid-cols-3 gap-5">
           {filteredContacts.map(contact => (
-            <Card key={contact.id} hover>
+            <Card key={contact.id} hover className="relative group">
+              <button
+                onClick={() => handleDelete(contact.id)}
+                disabled={deletingId === contact.id}
+                className="absolute top-3 right-3 p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 disabled:opacity-50 opacity-0 group-hover:opacity-100 transition"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
               <div className="p-6">
                 <div className="flex items-start gap-4 mb-4">
                   <Avatar name={`${contact.firstName} ${contact.lastName}`} size="lg" />

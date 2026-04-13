@@ -24,26 +24,55 @@ export default function Leads() {
   const [viewMode, setViewMode] = useState('table') // 'table' or 'grid'
   const [formData, setFormData] = useState({ title: '', description: '', value: '', source: '', status: 'NEW', accountId: '' })
   const [accounts, setAccounts] = useState([])
+  const [error, setError] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
 
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
     try {
+      setError(null)
       const [leadsRes, accountsRes] = await Promise.all([api.get('/leads'), api.get('/accounts')])
-      setLeads(leadsRes.data)
-      setAccounts(accountsRes.data)
-    } catch (err) { console.error(err) }
-    finally { setLoading(false) }
+      setLeads(leadsRes.data || [])
+      setAccounts(accountsRes.data || [])
+    } catch (err) {
+      console.error('Fetch error:', err)
+      setError('Məlumatları yükləyə bilmədi')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!formData.title.trim()) {
+      setError('Başlıq daxil edin')
+      return
+    }
     try {
       await api.post('/leads', { ...formData, value: parseFloat(formData.value) || null })
       setShowForm(false)
       setFormData({ title: '', description: '', value: '', source: '', status: 'NEW', accountId: '' })
+      setError(null)
       fetchData()
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error('Submit error:', err)
+      setError(err.message || 'Lead əlavə edilə bilmədi')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Bu lead-i silmək istəyirsiniz?')) return
+    try {
+      setDeletingId(id)
+      await api.delete(`/leads/${id}`)
+      fetchData()
+    } catch (err) {
+      console.error('Delete error:', err)
+      alert('Silinə bilmədi: ' + (err.message || 'Xəta baş verdi'))
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const filteredLeads = leads.filter(lead => {
@@ -65,10 +94,25 @@ export default function Leads() {
           <h1 className="text-2xl font-bold text-slate-800">Lead-lər</h1>
           <p className="text-slate-500 text-sm mt-1">{filteredLeads.length} lead tapıldı</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} icon={Plus}>
+        <Button onClick={() => { setShowForm(!showForm); setError(null) }} icon={Plus}>
           Yeni Lead
         </Button>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
 
       {/* New Lead Form */}
       {showForm && (
@@ -194,8 +238,12 @@ export default function Leads() {
                         <Link to={`/leads/${lead.id}`} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-blue-600">
                           <Eye size={18} />
                         </Link>
-                        <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-amber-600">
-                          <Edit size={18} />
+                        <button
+                          onClick={() => handleDelete(lead.id)}
+                          disabled={deletingId === lead.id}
+                          className="p-2 hover:bg-red-50 rounded-lg text-slate-500 hover:text-red-600 disabled:opacity-50"
+                        >
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </td>

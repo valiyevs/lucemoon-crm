@@ -23,11 +23,13 @@ export default function LeadDetail() {
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState({})
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => { fetchLead() }, [id])
 
   const fetchLead = async () => {
     try {
+      setError(null)
       const res = await api.get(`/leads/${id}`)
       setLead(res.data)
       setFormData({
@@ -37,8 +39,12 @@ export default function LeadDetail() {
         source: res.data.source || '',
         status: res.data.status,
       })
-    } catch (err) { console.error(err) }
-    finally { setLoading(false) }
+    } catch (err) {
+      console.error('Fetch error:', err)
+      setError('Lead yüklənə bilmədi')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleUpdate = async () => {
@@ -46,9 +52,14 @@ export default function LeadDetail() {
     try {
       await api.put(`/leads/${id}`, formData)
       setEditing(false)
+      setError(null)
       fetchLead()
-    } catch (err) { console.error(err) }
-    finally { setSaving(false) }
+    } catch (err) {
+      console.error('Update error:', err)
+      setError('Yenilənə bilmədi')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) return <Layout><Loading /></Layout>
@@ -76,6 +87,14 @@ export default function LeadDetail() {
           {editing ? 'Ləğv et' : 'Redaktə Et'}
         </Button>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-6">
         {/* Main Info */}

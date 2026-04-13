@@ -16,6 +16,10 @@ import OrderDetail from './pages/OrderDetail'
 import Invoices from './pages/Invoices'
 import Users from './pages/Users'
 import Settings from './pages/Settings'
+import Tasks from './pages/Tasks'
+import AuditLogs from './pages/AuditLogs'
+import Reports from './pages/Reports'
+import Export from './pages/Export'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -44,6 +48,10 @@ function App() {
           <Route path="/invoices" element={<PrivateRoute><Invoices /></PrivateRoute>} />
           <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
           <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+          <Route path="/tasks" element={<PrivateRoute><Tasks /></PrivateRoute>} />
+          <Route path="/audit-logs" element={<PrivateRoute><AuditLogs /></PrivateRoute>} />
+          <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
+          <Route path="/export" element={<PrivateRoute><Export /></PrivateRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -12,31 +12,60 @@ export default function Products() {
   const [selectedCategory, setSelectedCategory] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({ sku: '', name: '', description: '', category: '', unit: 'ədəd', price: '', costPrice: '', stock: 0 })
+  const [error, setError] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
 
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
     try {
+      setError(null)
       const [productsRes, categoriesRes] = await Promise.all([api.get('/products'), api.get('/products/categories')])
-      setProducts(productsRes.data)
-      setCategories(categoriesRes.data)
-    } catch (err) { console.error(err) }
-    finally { setLoading(false) }
+      setProducts(productsRes.data || [])
+      setCategories(categoriesRes.data || [])
+    } catch (err) {
+      console.error('Fetch error:', err)
+      setError('Məlumatları yükləyə bilmədi')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!formData.sku.trim() || !formData.name.trim() || !formData.category.trim() || !formData.price) {
+      setError('SKU, Ad, Kateqoriya və Qiymət daxil edin')
+      return
+    }
     try {
       await api.post('/products', {
         ...formData,
         price: parseFloat(formData.price),
         costPrice: formData.costPrice ? parseFloat(formData.costPrice) : null,
-        stock: parseInt(formData.stock)
+        stock: parseInt(formData.stock) || 0
       })
       setShowForm(false)
       setFormData({ sku: '', name: '', description: '', category: '', unit: 'ədəd', price: '', costPrice: '', stock: 0 })
+      setError(null)
       fetchData()
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error('Submit error:', err)
+      setError(err.message || 'Məhsul əlavə edilə bilmədi')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Bu məhsulu silmək istəyirsiniz?')) return
+    try {
+      setDeletingId(id)
+      await api.delete(`/products/${id}`)
+      fetchData()
+    } catch (err) {
+      console.error('Delete error:', err)
+      alert('Silinə bilmədi: ' + (err.message || 'Xəta baş verdi'))
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const filteredProducts = products.filter(p => {
@@ -61,10 +90,25 @@ export default function Products() {
           <h1 className="text-2xl font-bold text-slate-800">Məhsul Kataloqu</h1>
           <p className="text-slate-500 text-sm mt-1">{products.length} məhsul qeydə alınıb</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} icon={Plus}>
+        <Button onClick={() => { setShowForm(!showForm); setError(null) }} icon={Plus}>
           Yeni Məhsul
         </Button>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
 
       {/* New Product Form */}
       {showForm && (
@@ -140,7 +184,17 @@ export default function Products() {
             const profitMargin = product.costPrice ? ((product.price - product.costPrice) / product.price * 100).toFixed(0) : null
 
             return (
-              <Card key={product.id} hover className="p-5 group">
+              <Card key={product.id} hover className="p-5 group relative">
+                <button
+                  onClick={() => handleDelete(product.id)}
+                  disabled={deletingId === product.id}
+                  className="absolute top-3 right-3 p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 disabled:opacity-50 opacity-0 group-hover:opacity-100 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-14 h-14 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
                     <Package className="text-white" size={28} />

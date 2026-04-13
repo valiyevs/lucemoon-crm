@@ -5,11 +5,12 @@ import { Plus, X, GripVertical } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
-  closestCenter,
+  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -74,6 +75,43 @@ function LeadCard({ lead, onClick }) {
   )
 }
 
+function DroppableColumn({ stage, stageLeads }) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage.id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex-shrink-0 w-72 transition-all ${isOver ? 'scale-105' : ''}`}
+    >
+      <div className={`bg-slate-100 rounded-xl p-3 border-t-4 ${stage.color}`}>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <h3 className="font-semibold text-slate-700 text-sm">{stage.label}</h3>
+          <span className="bg-white text-slate-600 text-xs font-bold px-2 py-1 rounded-full shadow-sm">
+            {stageLeads.length}
+          </span>
+        </div>
+        <SortableContext items={stageLeads.map(l => l.id)} strategy={verticalListSortingStrategy}>
+          <div className={`min-h-96 bg-slate-50/50 rounded-lg p-2 transition-all ${isOver ? 'bg-blue-100 ring-2 ring-blue-400' : ''}`}>
+            {stageLeads.map((lead) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                onClick={() => window.location.href = `/leads/${lead.id}`}
+              />
+            ))}
+            {stageLeads.length === 0 && (
+              <div className="text-center py-12 text-slate-400 text-sm">
+                <p>Boşdur</p>
+                <p className="text-xs mt-1">Lead-i bura sürüşdürün</p>
+              </div>
+            )}
+          </div>
+        </SortableContext>
+      </div>
+    </div>
+  )
+}
+
 export default function Pipeline() {
   const [leads, setLeads] = useState([])
   const [stages, setStages] = useState(defaultStages)
@@ -85,21 +123,27 @@ export default function Pipeline() {
   const [stageFormData, setStageFormData] = useState({ label: '', color: 'bg-blue-500' })
   const [accounts, setAccounts] = useState([])
   const [userRole, setUserRole] = useState(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
     try {
+      setError(null)
       const [leadsRes, accountsRes, userRes] = await Promise.all([
         api.get('/leads'),
         api.get('/accounts'),
         api.get('/auth/me')
       ])
-      setLeads(leadsRes.data)
-      setAccounts(accountsRes.data)
+      setLeads(leadsRes.data || [])
+      setAccounts(accountsRes.data || [])
       setUserRole(userRes.data.role)
-    } catch (err) { console.error(err) }
-    finally { setLoading(false) }
+    } catch (err) {
+      console.error('Fetch error:', err)
+      setError('Məlumatları yükləyə bilmədi')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const sensors = useSensors(
@@ -144,17 +188,28 @@ export default function Pipeline() {
     try {
       await api.put(`/leads/${leadId}`, { status: newStatus })
       setLeads(leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error('Update status error:', err)
+      alert('Status yenilənə bilmədi')
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!formData.title.trim()) {
+      setError('Başlıq daxil edin')
+      return
+    }
     try {
       const res = await api.post('/leads', { ...formData, value: parseFloat(formData.value) || null })
       setLeads([...leads, res.data])
       setShowForm(false)
       setFormData({ title: '', description: '', value: '', source: '', accountId: '' })
-    } catch (err) { console.error(err) }
+      setError(null)
+    } catch (err) {
+      console.error('Submit error:', err)
+      setError(err.message || 'Lead əlavə edilə bilmədi')
+    }
   }
 
   const handleAddStage = (e) => {
@@ -174,7 +229,13 @@ export default function Pipeline() {
 
   const activeLead = activeId ? leads.find(l => l.id === activeId) : null
 
-  if (loading) return <Layout><Loading /></Layout>
+  if (loading) return (
+    <Layout>
+      <div className="flex items-center justify-center py-20">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    </Layout>
+  )
 
   return (
     <Layout>
@@ -182,7 +243,7 @@ export default function Pipeline() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Satış Pipelini</h1>
-          <p className="text-slate-500 text-sm mt-1">Lead-ləri süürüşdürüb status dəyişdirin</p>
+          <p className="text-slate-500 text-sm mt-1">{leads.length} lead mövcuddur</p>
         </div>
         <div className="flex gap-3">
           {userRole === 'ADMIN' && (
@@ -190,16 +251,24 @@ export default function Pipeline() {
               Yeni Bölmə
             </Button>
           )}
-          <Button onClick={() => setShowForm(true)} icon={Plus}>
+          <Button onClick={() => { setShowForm(true); setError(null) }} icon={Plus}>
             Yeni Lead
           </Button>
         </div>
       </div>
 
+      {/* Error Alert */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
+
       {/* Pipeline Board */}
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={rectIntersection}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
@@ -207,33 +276,7 @@ export default function Pipeline() {
           {stages.map((stage) => {
             const stageLeads = leads.filter(l => l.status === stage.id)
             return (
-              <div key={stage.id} className="flex-shrink-0 w-72">
-                <div className={`bg-slate-100 rounded-xl p-3 border-t-4 ${stage.color}`}>
-                  <div className="flex items-center justify-between mb-3 px-1">
-                    <h3 className="font-semibold text-slate-700 text-sm">{stage.label}</h3>
-                    <span className="bg-white text-slate-600 text-xs font-bold px-2 py-1 rounded-full shadow-sm">
-                      {stageLeads.length}
-                    </span>
-                  </div>
-                  <SortableContext items={stageLeads.map(l => l.id)} strategy={verticalListSortingStrategy}>
-                    <div className="min-h-96 bg-slate-50/50 rounded-lg p-2">
-                      {stageLeads.map((lead) => (
-                        <LeadCard
-                          key={lead.id}
-                          lead={lead}
-                          onClick={() => window.location.href = `/leads/${lead.id}`}
-                        />
-                      ))}
-                      {stageLeads.length === 0 && (
-                        <div className="text-center py-12 text-slate-400 text-sm">
-                          <p>Boşdur</p>
-                          <p className="text-xs mt-1">Lead-i bura sürüşdürün</p>
-                        </div>
-                      )}
-                    </div>
-                  </SortableContext>
-                </div>
-              </div>
+              <DroppableColumn key={stage.id} stage={stage} stageLeads={stageLeads} />
             )
           })}
         </div>

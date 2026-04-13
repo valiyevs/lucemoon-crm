@@ -10,25 +10,54 @@ export default function Accounts() {
   const [showForm, setShowForm] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({ name: '', type: 'Company', industry: '', phone: '', email: '', address: '', city: '' })
+  const [error, setError] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
 
   useEffect(() => { fetchAccounts() }, [])
 
   const fetchAccounts = async () => {
     try {
+      setError(null)
       const res = await api.get('/accounts')
-      setAccounts(res.data)
-    } catch (err) { console.error(err) }
-    finally { setLoading(false) }
+      setAccounts(res.data || [])
+    } catch (err) {
+      console.error('Fetch error:', err)
+      setError('Məlumatları yükləyə bilmədi')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!formData.name.trim()) {
+      setError('Şirkət adı daxil edin')
+      return
+    }
     try {
       await api.post('/accounts', formData)
       setShowForm(false)
       setFormData({ name: '', type: 'Company', industry: '', phone: '', email: '', address: '', city: '' })
+      setError(null)
       fetchAccounts()
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error('Submit error:', err)
+      setError(err.message || 'Müştəri əlavə edilə bilmədi')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Bu müştərini silmək istəyirsiniz?')) return
+    try {
+      setDeletingId(id)
+      await api.delete(`/accounts/${id}`)
+      fetchAccounts()
+    } catch (err) {
+      console.error('Delete error:', err)
+      alert('Silinə bilmədi: ' + (err.message || 'Xəta baş verdi'))
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const filteredAccounts = accounts.filter(a =>
@@ -44,10 +73,25 @@ export default function Accounts() {
           <h1 className="text-2xl font-bold text-slate-800">Müştərilər</h1>
           <p className="text-slate-500 text-sm mt-1">{accounts.length} şirkət qeydə alınıb</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} icon={Plus}>
+        <Button onClick={() => { setShowForm(!showForm); setError(null) }} icon={Plus}>
           Yeni Müştəri
         </Button>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      )}
 
       {/* New Account Form */}
       {showForm && (
@@ -115,9 +159,17 @@ export default function Accounts() {
                     </div>
                   </div>
                 </div>
-                <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400">
-                  <MoreHorizontal size={18} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleDelete(account.id)}
+                    disabled={deletingId === account.id}
+                    className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-3 mb-5">

@@ -15,11 +15,19 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError('')
+
+    // Basic validation
+    if (!email || !password) {
+      setError('Email və şifrə daxil edin')
+      setLoading(false)
+      return
+    }
+
     try {
       await login(email, password)
       navigate('/')
     } catch (err) {
-      setError(err.response?.data?.error || 'Giriş uğursuz oldu')
+      setError(err.message || 'Giriş uğursuz oldu. Email və ya şifrə yalnışdır.')
     } finally {
       setLoading(false)
     }

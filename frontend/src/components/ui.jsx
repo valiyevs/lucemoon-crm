@@ -112,6 +112,27 @@ export function Badge({ children, variant = 'default', size = 'md' }) {
     danger: 'bg-red-50 text-red-700 border border-red-200',
     info: 'bg-blue-50 text-blue-700 border border-blue-200',
     purple: 'bg-purple-50 text-purple-700 border border-purple-200',
+    cyan: 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+    // Lead status variants
+    NEW: 'bg-blue-50 text-blue-700 border border-blue-200',
+    CONTACTED: 'bg-amber-50 text-amber-700 border border-amber-200',
+    QUALIFIED: 'bg-purple-50 text-purple-700 border border-purple-200',
+    PROPOSAL: 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+    NEGOTIATION: 'bg-orange-50 text-orange-700 border border-orange-200',
+    WON: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    LOST: 'bg-red-50 text-red-700 border border-red-200',
+    // Order status variants
+    PENDING: 'bg-amber-50 text-amber-700 border border-amber-200',
+    CONFIRMED: 'bg-blue-50 text-blue-700 border border-blue-200',
+    PROCESSING: 'bg-purple-50 text-purple-700 border border-purple-200',
+    SHIPPED: 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+    DELIVERED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    CANCELLED: 'bg-red-50 text-red-700 border border-red-200',
+    // Invoice status variants
+    DRAFT: 'bg-slate-100 text-slate-700',
+    SENT: 'bg-blue-50 text-blue-700 border border-blue-200',
+    PAID: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    OVERDUE: 'bg-red-50 text-red-700 border border-red-200',
   }
 
   const sizes = {
@@ -121,7 +142,7 @@ export function Badge({ children, variant = 'default', size = 'md' }) {
   }
 
   return (
-    <span className={`inline-flex items-center font-medium rounded-full ${variants[variant]} ${sizes[size]}`}>
+    <span className={`inline-flex items-center font-medium rounded-full ${variants[variant] || variants.default} ${sizes[size]}`}>
       {children}
     </span>
   )
@@ -288,6 +309,125 @@ export function ProgressBar({ value, max = 100, color = 'blue', size = 'md' }) {
         className={`${colors[color]} ${sizes[size]} rounded-full transition-all duration-500`}
         style={{ width: `${percentage}%` }}
       />
+    </div>
+  )
+}
+
+export function Alert({ children, variant = 'info', title, onClose }) {
+  const variants = {
+    info: 'bg-blue-50 border-blue-200 text-blue-800',
+    success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    warning: 'bg-amber-50 border-amber-200 text-amber-800',
+    danger: 'bg-red-50 border-red-200 text-red-800',
+  }
+
+  const icons = {
+    info: (
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+      </svg>
+    ),
+    success: (
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+      </svg>
+    ),
+    warning: (
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+      </svg>
+    ),
+    danger: (
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+      </svg>
+    ),
+  }
+
+  return (
+    <div className={`flex items-start gap-3 p-4 border rounded-xl ${variants[variant]}`}>
+      <div className="flex-shrink-0">{icons[variant]}</div>
+      <div className="flex-1">
+        {title && <h4 className="font-semibold mb-1">{title}</h4>}
+        <div className="text-sm">{children}</div>
+      </div>
+      {onClose && (
+        <button onClick={onClose} className="flex-shrink-0 opacity-70 hover:opacity-100">
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+      )}
+    </div>
+  )
+}
+
+export function Pagination({ currentPage, totalPages, onPageChange }) {
+  if (totalPages <= 1) return null
+
+  const pages = []
+  const maxVisible = 5
+
+  let start = Math.max(1, currentPage - Math.floor(maxVisible / 2))
+  let end = Math.min(totalPages, start + maxVisible - 1)
+
+  if (end - start + 1 < maxVisible) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-2 mt-8">
+      <button
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className="px-3 py-2 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+
+      {start > 1 && (
+        <>
+          <button onClick={() => onPageChange(1)} className="px-3 py-2 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition">1</button>
+          {start > 2 && <span className="text-slate-400">...</span>}
+        </>
+      )}
+
+      {pages.map(page => (
+        <button
+          key={page}
+          onClick={() => onPageChange(page)}
+          className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+            page === currentPage
+              ? 'bg-blue-600 text-white'
+              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          {page}
+        </button>
+      ))}
+
+      {end < totalPages && (
+        <>
+          {end < totalPages - 1 && <span className="text-slate-400">...</span>}
+          <button onClick={() => onPageChange(totalPages)} className="px-3 py-2 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition">{totalPages}</button>
+        </>
+      )}
+
+      <button
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className="px-3 py-2 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
     </div>
   )
 }

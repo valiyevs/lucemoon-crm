@@ -16,7 +16,11 @@ import {
   LogOut,
   Settings,
   Menu,
-  X
+  X,
+  CheckSquare,
+  Activity,
+  BarChart3,
+  Download
 } from 'lucide-react'
 
 const navItems = [
@@ -29,10 +33,14 @@ const navItems = [
   { path: '/quotes', label: 'Təkliflər', icon: FileText },
   { path: '/orders', label: 'Sifarişlər', icon: ShoppingCart },
   { path: '/invoices', label: 'Fakturalar', icon: Receipt },
+  { path: '/tasks', label: 'Tapşırıqlar', icon: CheckSquare },
 ]
 
 const adminItems = [
   { path: '/users', label: 'İstifadəçilər', icon: Users },
+  { path: '/reports', label: 'Hesabatlar', icon: BarChart3 },
+  { path: '/export', label: 'İxrac/İdxal', icon: Download },
+  { path: '/audit-logs', label: 'Audit Log', icon: Activity },
   { path: '/settings', label: 'Ayarlar', icon: Settings },
 ]
 

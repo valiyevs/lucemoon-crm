@@ -18,24 +18,53 @@ export default function QuoteDetail() {
   const [quote, setQuote] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => { fetchQuote() }, [id])
 
   const fetchQuote = async () => {
-    try { const res = await api.get(`/quotes/${id}`); setQuote(res.data) }
-    catch (err) { console.error(err) }
-    finally { setLoading(false) }
+    try {
+      setError(null)
+      const res = await api.get(`/quotes/${id}`)
+      setQuote(res.data)
+    } catch (err) {
+      console.error('Fetch error:', err)
+      setError('Təklif yüklənə bilmədi')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const updateStatus = async (status) => {
     try {
+      setSaving(true)
       await api.put(`/quotes/${id}`, { status })
+      setError(null)
       fetchQuote()
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error('Update error:', err)
+      setError('Status yenilənə bilmədi')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  if (loading) return <Layout><Loading /></Layout>
-  if (!quote) return <Layout><p>Teklif tapilmadi</p></Layout>
+  if (loading) return (
+    <Layout>
+      <div className="flex items-center justify-center py-20">
+        <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    </Layout>
+  )
+
+  if (!quote) return (
+    <Layout>
+      <div className="text-center py-20">
+        <p className="text-slate-500">Təklif tapılmadı</p>
+        <Button variant="secondary" onClick={() => navigate('/quotes')} className="mt-4">Geriyə qayıt</Button>
+      </div>
+    </Layout>
+  )
 
   return (
     <Layout>
@@ -57,16 +86,24 @@ export default function QuoteDetail() {
         </div>
         <div className="flex items-center gap-3">
           {quote.status === 'DRAFT' && (
-            <Button variant="primary" onClick={() => updateStatus('SENT')}>Gonder</Button>
+            <Button variant="primary" onClick={() => updateStatus('SENT')} loading={saving}>Göndər</Button>
           )}
           {quote.status === 'SENT' && (
             <>
-              <Button variant="danger" onClick={() => updateStatus('REJECTED')}>Redd et</Button>
-              <Button variant="success" onClick={() => updateStatus('ACCEPTED')}>Qebul et</Button>
+              <Button variant="danger" onClick={() => updateStatus('REJECTED')} loading={saving}>Rədd et</Button>
+              <Button variant="success" onClick={() => updateStatus('ACCEPTED')} loading={saving}>Qəbul et</Button>
             </>
           )}
         </div>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-6">
         {/* Items */}
