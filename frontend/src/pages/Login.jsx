@@ -1,14 +1,17 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { Mail, Lock, AlertCircle } from 'lucide-react'
+import { Mail, Lock, AlertCircle, User, ArrowRight } from 'lucide-react'
 
 export default function Login() {
+  const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
+  const { login, register } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -16,18 +19,28 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    // Basic validation
     if (!email || !password) {
       setError('Email və şifrə daxil edin')
       setLoading(false)
       return
     }
 
+    if (isRegister && (!firstName || !lastName)) {
+      setError('Ad və soyad daxil edin')
+      setLoading(false)
+      return
+    }
+
     try {
-      await login(email, password)
-      navigate('/')
+      if (isRegister) {
+        await register(email, password, firstName, lastName)
+        navigate('/')
+      } else {
+        await login(email, password)
+        navigate('/')
+      }
     } catch (err) {
-      setError(err.message || 'Giriş uğursuz oldu. Email və ya şifrə yalnışdır.')
+      setError(err.message || (isRegister ? 'Qeydiyyat uğursuz oldu' : 'Giriş uğursuz oldu'))
     } finally {
       setLoading(false)
     }
@@ -80,7 +93,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right Side - Login Form */}
+      {/* Right Side - Login/Register Form */}
       <div className="flex-1 flex items-center justify-center p-8 bg-slate-50">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
@@ -95,8 +108,12 @@ export default function Login() {
 
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-slate-800">Xoş gəldiniz!</h2>
-              <p className="text-slate-500 mt-2">Daxil olmaq üçün məlumatlarınızı daxil edin</p>
+              <h2 className="text-2xl font-bold text-slate-800">
+                {isRegister ? 'Qeydiyyat' : 'Xoş gəldiniz!'}
+              </h2>
+              <p className="text-slate-500 mt-2">
+                {isRegister ? 'Yeni hesab yaradın' : 'Daxil olmaq üçün məlumatlarınızı daxil edin'}
+              </p>
             </div>
 
             {error && (
@@ -107,6 +124,40 @@ export default function Login() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              {isRegister && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Ad</label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                        placeholder="Adınız"
+                        required={isRegister}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Soyad</label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                        placeholder="Soyadınız"
+                        required={isRegister}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Email ünvanı</label>
                 <div className="relative">
@@ -133,6 +184,7 @@ export default function Login() {
                     className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                     placeholder="••••••••"
                     required
+                    minLength={6}
                   />
                 </div>
               </div>
@@ -140,7 +192,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl hover:from-blue-500 hover:to-blue-400 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl hover:from-blue-500 hover:to-blue-400 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -148,20 +200,26 @@ export default function Login() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Giriş edilir...
+                    {isRegister ? 'Qeydiyyat edilir...' : 'Giriş edilir...'}
                   </span>
                 ) : (
-                  'Daxil Ol'
+                  <span className="flex items-center justify-center gap-2">
+                    {isRegister ? 'Qeydiyyatdan keç' : 'Daxil ol'}
+                    <ArrowRight size={18} />
+                  </span>
                 )}
               </button>
             </form>
 
-            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+            <div className="mt-6 pt-6 border-t border-slate-100 text-center">
               <p className="text-sm text-slate-500">
-                Demo hesab: <span className="font-medium text-slate-700">admin@lucemoon.az</span>
-              </p>
-              <p className="text-sm text-slate-500 mt-1">
-                Şifrə: <span className="font-medium text-slate-700">admin123</span>
+                {isRegister ? 'Artıq hesabınız var?' : 'Hesabınız yoxdur?'}
+                <button
+                  onClick={() => { setIsRegister(!isRegister); setError('') }}
+                  className="text-blue-600 hover:text-blue-700 font-medium ml-1"
+                >
+                  {isRegister ? 'Daxil olun' : 'Qeydiyyatdan keçin'}
+                </button>
               </p>
             </div>
           </div>
