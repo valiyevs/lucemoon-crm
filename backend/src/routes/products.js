@@ -1,24 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const { auth } = require('../middleware/auth');
-const { body, param, validationResult } = require('express-validator');
+const prisma = require('../utils/prisma');
+const { auth, authorize } = require('../middleware/auth');
+const { body, param } = require('express-validator');
+const validate = require('../middleware/validate');
+const activityLogger = require('../middleware/activityLogger');
+const { paginate, paginatedResponse } = require('../utils/pagination');
 
-const prisma = new PrismaClient();
-
-// Validation middleware
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
-  }
-  next();
-};
-
-// GET /api/products - List all products
+// GET /api/products - List all products (paginated)
 router.get('/', auth, async (req, res) => {
   try {
     const { category, search, includeInactive } = req.query;
+    const { page, limit, skip } = paginate(req.query);
     const where = {};
 
     if (category) where.category = category;
@@ -32,11 +25,16 @@ router.get('/', auth, async (req, res) => {
       where.isActive = true;
     }
 
-    const products = await prisma.product.findMany({
-      where,
-      orderBy: { name: 'asc' }
-    });
-    res.json(products);
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        skip,
+        take: limit
+      }),
+      prisma.product.count({ where })
+    ]);
+    res.json(paginatedResponse(products, total, page, limit));
   } catch (err) {
     console.error('GET /api/products error:', err);
     res.status(500).json({ error: 'Failed to fetch products' });
@@ -80,6 +78,7 @@ router.get('/:id',
 // POST /api/products - Create product
 router.post('/',
   auth,
+  activityLogger('Product', 'CREATE'),
   body('sku').notEmpty().withMessage('SKU is required'),
   body('name').notEmpty().withMessage('Name is required'),
   body('category').notEmpty().withMessage('Category is required'),
@@ -89,7 +88,10 @@ router.post('/',
   validate,
   async (req, res) => {
     try {
-      const product = await prisma.product.create({ data: req.body });
+      const { sku, name, description, category, unit, price, costPrice, stock } = req.body;
+      const product = await prisma.product.create({
+        data: { sku, name, description, category, unit, price, costPrice, stock }
+      });
       res.status(201).json(product);
     } catch (err) {
       console.error('POST /api/products error:', err);
@@ -104,6 +106,7 @@ router.post('/',
 // PUT /api/products/:id - Update product
 router.put('/:id',
   auth,
+  activityLogger('Product', 'UPDATE'),
   param('id').isInt().withMessage('ID must be a number'),
   body('price').optional().isFloat({ min: 0 }).withMessage('Price must be a positive number'),
   body('costPrice').optional().isFloat({ min: 0 }).withMessage('Cost price must be a positive number'),
@@ -111,9 +114,10 @@ router.put('/:id',
   validate,
   async (req, res) => {
     try {
+      const { name, description, category, unit, price, costPrice, stock, isActive } = req.body;
       const product = await prisma.product.update({
         where: { id: parseInt(req.params.id) },
-        data: req.body
+        data: { name, description, category, unit, price, costPrice, stock, isActive }
       });
       res.json(product);
     } catch (err) {
@@ -132,6 +136,8 @@ router.put('/:id',
 // DELETE /api/products/:id - Soft delete (deactivate) product
 router.delete('/:id',
   auth,
+  authorize('ADMIN', 'MANAGER'),
+  activityLogger('Product', 'DELETE'),
   param('id').isInt().withMessage('ID must be a number'),
   validate,
   async (req, res) => {

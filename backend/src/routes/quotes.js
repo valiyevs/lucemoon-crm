@@ -1,26 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const { auth } = require('../middleware/auth');
-const { body, param, validationResult } = require('express-validator');
-
-const prisma = new PrismaClient();
+const prisma = require('../utils/prisma');
+const { auth, authorize } = require('../middleware/auth');
+const { body, param } = require('express-validator');
+const validate = require('../middleware/validate');
+const activityLogger = require('../middleware/activityLogger');
+const { paginate, paginatedResponse } = require('../utils/pagination');
 
 const VALID_STATUSES = ['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED'];
 
-// Validation middleware
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
-  }
-  next();
-};
-
-// GET /api/quotes - List all quotes
+// GET /api/quotes - List all quotes (paginated)
 router.get('/', auth, async (req, res) => {
   try {
     const { status, userId, search } = req.query;
+    const { page, limit, skip } = paginate(req.query);
     const where = {};
 
     if (status) where.status = status;
@@ -32,18 +25,23 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
-    const quotes = await prisma.quote.findMany({
-      where,
-      include: {
-        account: true,
-        contact: true,
-        lead: true,
-        user: { select: { id: true, firstName: true, lastName: true } },
-        items: { include: { product: true } }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(quotes);
+    const [quotes, total] = await Promise.all([
+      prisma.quote.findMany({
+        where,
+        include: {
+          account: true,
+          contact: true,
+          lead: true,
+          user: { select: { id: true, firstName: true, lastName: true } },
+          items: { include: { product: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.quote.count({ where })
+    ]);
+    res.json(paginatedResponse(quotes, total, page, limit));
   } catch (err) {
     console.error('GET /api/quotes error:', err);
     res.status(500).json({ error: 'Failed to fetch quotes' });
@@ -79,6 +77,7 @@ router.get('/:id',
 // POST /api/quotes - Create quote
 router.post('/',
   auth,
+  activityLogger('Quote', 'CREATE'),
   body('accountId').optional({ nullable: true }).isInt().withMessage('Account ID must be a number'),
   body('status').optional().isIn(VALID_STATUSES),
   validate,
@@ -100,8 +99,7 @@ router.post('/',
       const taxAmount = subtotal * (quoteData.taxRate || 0);
 
       // Generate quote number
-      const count = await prisma.quote.count();
-      const quoteNumber = `Q-${Date.now().toString(36).toUpperCase()}-${count + 1}`;
+      const quoteNumber = `Q-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
       const quote = await prisma.quote.create({
         data: {
@@ -134,15 +132,13 @@ router.post('/',
 // PUT /api/quotes/:id - Update quote
 router.put('/:id',
   auth,
+  activityLogger('Quote', 'UPDATE'),
   param('id').isInt().withMessage('ID must be a number'),
   body('status').optional().isIn(VALID_STATUSES),
   validate,
   async (req, res) => {
     try {
       const { items, ...quoteData } = req.body;
-
-      // Delete old items and recreate
-      await prisma.quoteItem.deleteMany({ where: { quoteId: parseInt(req.params.id) } });
 
       const calculatedItems = items.map(item => ({
         ...item,
@@ -151,21 +147,24 @@ router.put('/:id',
       const subtotal = calculatedItems.reduce((sum, item) => sum + item.total, 0);
       const taxAmount = subtotal * (quoteData.taxRate || 0);
 
-      const quote = await prisma.quote.update({
-        where: { id: parseInt(req.params.id) },
-        data: {
-          ...quoteData,
-          subtotal,
-          taxAmount,
-          total: subtotal + taxAmount,
-          items: {
-            create: calculatedItems
+      const quote = await prisma.$transaction(async (tx) => {
+        await tx.quoteItem.deleteMany({ where: { quoteId: parseInt(req.params.id) } });
+        return tx.quote.update({
+          where: { id: parseInt(req.params.id) },
+          data: {
+            ...quoteData,
+            subtotal,
+            taxAmount,
+            total: subtotal + taxAmount,
+            items: {
+              create: calculatedItems
+            }
+          },
+          include: {
+            items: { include: { product: true } },
+            account: true
           }
-        },
-        include: {
-          items: { include: { product: true } },
-          account: true
-        }
+        });
       });
       res.json(quote);
     } catch (err) {
@@ -181,6 +180,8 @@ router.put('/:id',
 // DELETE /api/quotes/:id - Delete quote
 router.delete('/:id',
   auth,
+  authorize('ADMIN', 'MANAGER'),
+  activityLogger('Quote', 'DELETE'),
   param('id').isInt().withMessage('ID must be a number'),
   validate,
   async (req, res) => {

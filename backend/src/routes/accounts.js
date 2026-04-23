@@ -1,24 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const { auth } = require('../middleware/auth');
-const { body, param, validationResult } = require('express-validator');
+const prisma = require('../utils/prisma');
+const { auth, authorize } = require('../middleware/auth');
+const { body, param } = require('express-validator');
+const validate = require('../middleware/validate');
+const activityLogger = require('../middleware/activityLogger');
+const { paginate, paginatedResponse } = require('../utils/pagination');
 
-const prisma = new PrismaClient();
-
-// Validation middleware
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
-  }
-  next();
-};
-
-// GET /api/accounts - List all accounts
+// GET /api/accounts - List all accounts (paginated)
 router.get('/', auth, async (req, res) => {
   try {
     const { search, industry } = req.query;
+    const { page, limit, skip } = paginate(req.query);
     const where = {};
 
     if (search) {
@@ -29,12 +22,17 @@ router.get('/', auth, async (req, res) => {
     }
     if (industry) where.industry = industry;
 
-    const accounts = await prisma.account.findMany({
-      where,
-      include: { _count: { select: { contacts: true, leads: true, quotes: true, orders: true } } },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(accounts);
+    const [accounts, total] = await Promise.all([
+      prisma.account.findMany({
+        where,
+        include: { _count: { select: { contacts: true, leads: true, quotes: true, orders: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.account.count({ where })
+    ]);
+    res.json(paginatedResponse(accounts, total, page, limit));
   } catch (err) {
     console.error('GET /api/accounts error:', err);
     res.status(500).json({ error: 'Failed to fetch accounts' });
@@ -69,13 +67,17 @@ router.get('/:id',
 // POST /api/accounts - Create account
 router.post('/',
   auth,
+  activityLogger('Account', 'CREATE'),
   body('name').notEmpty().withMessage('Name is required'),
   body('type').optional().isIn(['Company', 'Individual']),
   body('email').optional().isEmail().withMessage('Invalid email'),
   validate,
   async (req, res) => {
     try {
-      const account = await prisma.account.create({ data: req.body });
+      const { name, type, email, phone, address, website, industry, notes } = req.body;
+      const account = await prisma.account.create({
+        data: { name, type, email, phone, address, website, industry, notes }
+      });
       res.status(201).json(account);
     } catch (err) {
       console.error('POST /api/accounts error:', err);
@@ -90,14 +92,16 @@ router.post('/',
 // PUT /api/accounts/:id - Update account
 router.put('/:id',
   auth,
+  activityLogger('Account', 'UPDATE'),
   param('id').isInt().withMessage('ID must be a number'),
   body('email').optional().isEmail().withMessage('Invalid email'),
   validate,
   async (req, res) => {
     try {
+      const { name, type, email, phone, address, website, industry, notes } = req.body;
       const account = await prisma.account.update({
         where: { id: parseInt(req.params.id) },
-        data: req.body
+        data: { name, type, email, phone, address, website, industry, notes }
       });
       res.json(account);
     } catch (err) {
@@ -113,6 +117,8 @@ router.put('/:id',
 // DELETE /api/accounts/:id - Delete account
 router.delete('/:id',
   auth,
+  authorize('ADMIN', 'MANAGER'),
+  activityLogger('Account', 'DELETE'),
   param('id').isInt().withMessage('ID must be a number'),
   validate,
   async (req, res) => {

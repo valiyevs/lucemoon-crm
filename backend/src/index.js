@@ -39,6 +39,8 @@ app.use('/api/orders', require('./routes/orders'));
 app.use('/api/invoices', require('./routes/invoices'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/audit-logs', require('./routes/auditLogs'));
+app.use('/api/search', require('./routes/search'));
+app.use('/api/dashboard', require('./routes/dashboard'));
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -59,21 +61,21 @@ app.use((err, req, res, next) => {
 
   // Prisma errors
   if (err.code === 'P2002') {
-    return res.status(400).json({ error: 'Bu məlumat artıq mövcuddur' });
+    return res.status(400).json({ error: 'This record already exists' });
   }
   if (err.code === 'P2025') {
-    return res.status(404).json({ error: 'Məlumat tapılmadı' });
+    return res.status(404).json({ error: 'Record not found' });
   }
   if (err.code === 'P2003') {
-    return res.status(400).json({ error: 'İli silmək mümkün deyil - digər məlumatlarla əlaqəlidir' });
+    return res.status(400).json({ error: 'Cannot delete — referenced by other data' });
   }
 
   // JWT errors
   if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({ error: 'Keçərsiz token' });
+    return res.status(401).json({ error: 'Invalid token' });
   }
   if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({ error: 'Token vaxtı keçib' });
+    return res.status(401).json({ error: 'Token expired' });
   }
 
   // Validation errors
@@ -84,7 +86,7 @@ app.use((err, req, res, next) => {
   // Default error
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === 'production'
-      ? 'Server xətası baş verdi'
+      ? 'Internal server error'
       : err.message
   });
 });

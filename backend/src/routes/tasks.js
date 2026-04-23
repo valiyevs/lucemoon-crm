@@ -1,15 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const { auth } = require('../middleware/auth');
-const { body, validationResult } = require('express-validator');
+const prisma = require('../utils/prisma');
+const { auth, authorize } = require('../middleware/auth');
+const { body, param } = require('express-validator');
+const validate = require('../middleware/validate');
+const { paginate, paginatedResponse } = require('../utils/pagination');
 
-const prisma = new PrismaClient();
-
-// GET /api/tasks - List all tasks
+// GET /api/tasks - List all tasks (paginated)
 router.get('/', auth, async (req, res) => {
   try {
     const { status, priority, assignedTo, leadId, quoteId, orderId } = req.query;
+    const { page, limit, skip } = paginate(req.query);
     const where = {};
 
     if (status) where.status = status;
@@ -19,18 +20,23 @@ router.get('/', auth, async (req, res) => {
     if (quoteId) where.quoteId = parseInt(quoteId);
     if (orderId) where.orderId = parseInt(orderId);
 
-    const tasks = await prisma.task.findMany({
-      where,
-      include: {
-        lead: { select: { id: true, title: true } },
-        quote: { select: { id: true, quoteNumber: true } },
-        order: { select: { id: true, orderNumber: true } },
-        assignedUser: { select: { id: true, firstName: true, lastName: true } },
-        creator: { select: { id: true, firstName: true, lastName: true } }
-      },
-      orderBy: [{ status: 'asc' }, { priority: 'desc' }, { dueDate: 'asc' }]
-    });
-    res.json(tasks);
+    const [tasks, total] = await Promise.all([
+      prisma.task.findMany({
+        where,
+        include: {
+          lead: { select: { id: true, title: true } },
+          quote: { select: { id: true, quoteNumber: true } },
+          order: { select: { id: true, orderNumber: true } },
+          assignedUser: { select: { id: true, firstName: true, lastName: true } },
+          creator: { select: { id: true, firstName: true, lastName: true } }
+        },
+        orderBy: [{ status: 'asc' }, { priority: 'desc' }, { dueDate: 'asc' }],
+        skip,
+        take: limit
+      }),
+      prisma.task.count({ where })
+    ]);
+    res.json(paginatedResponse(tasks, total, page, limit));
   } catch (err) {
     console.error('GET /api/tasks error:', err);
     res.status(500).json({ error: 'Failed to fetch tasks' });
@@ -47,7 +53,7 @@ router.post('/',
   body('quoteId').optional().isInt(),
   body('orderId').optional().isInt(),
   body('assignedTo').optional().isInt(),
-  validationResult,
+  validate,
   async (req, res) => {
     try {
       const { title, description, priority, status, dueDate, leadId, quoteId, orderId, assignedTo } = req.body;
@@ -154,7 +160,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE /api/tasks/:id - Delete task
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, authorize('ADMIN', 'MANAGER'), async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
     await prisma.task.delete({ where: { id: taskId } });

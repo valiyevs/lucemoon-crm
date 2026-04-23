@@ -21,90 +21,53 @@ export default function Reports() {
   const fetchData = async () => {
     try {
       setError(null)
-      const [leadsRes, quotesRes, ordersRes, invoicesRes, usersRes] = await Promise.all([
-        api.get('/leads'),
-        api.get('/quotes'),
-        api.get('/orders'),
-        api.get('/invoices'),
-        api.get('/users')
+      const [dashboardRes, revenueRes, categoryRes] = await Promise.all([
+        api.get('/dashboard/stats'),
+        api.get('/dashboard/revenue-monthly'),
+        api.get('/dashboard/sales-by-category')
       ])
 
-      const leads = leadsRes.data || []
-      const quotes = quotesRes.data || []
-      const orders = ordersRes.data || []
-      const invoices = invoicesRes.data || []
-      const users = usersRes.data || []
-
-      // Calculate stats
-      const totalLeads = leads.length
-      const newLeads = leads.filter(l => l.status === 'NEW').length
-      const wonLeads = leads.filter(l => l.status === 'WON').length
-      const lostLeads = leads.filter(l => l.status === 'LOST').length
-      const conversionRate = totalLeads > 0 ? ((wonLeads / totalLeads) * 100).toFixed(1) : 0
-
-      const activeQuotes = quotes.filter(q => ['DRAFT', 'SENT'].includes(q.status)).length
-      const acceptedQuotes = quotes.filter(q => q.status === 'ACCEPTED').length
-      const totalQuoteValue = quotes.reduce((sum, q) => sum + (q.total || 0), 0)
-
-      const pendingOrders = orders.filter(o => ['PENDING', 'CONFIRMED', 'PROCESSING'].includes(o.status)).length
-      const completedOrders = orders.filter(o => o.status === 'DELIVERED').length
-      const totalOrderValue = orders.reduce((sum, o) => sum + (o.total || 0), 0)
-
-      const paidInvoices = invoices.filter(i => i.status === 'PAID').length
-      const overdueInvoices = invoices.filter(i => i.status === 'OVERDUE').length
-      const totalRevenue = invoices.filter(i => i.status === 'PAID').reduce((sum, i) => sum + (i.total || 0), 0)
-      const pendingRevenue = invoices.filter(i => ['DRAFT', 'SENT'].includes(i.status)).reduce((sum, i) => sum + (i.total || 0), 0)
+      const d = dashboardRes.data
+      const overview = d.overview || {}
 
       // Pipeline by status
-      const pipelineData = [
-        { status: 'Yeni', count: leads.filter(l => l.status === 'NEW').length, color: '#3b82f6' },
-        { status: 'Əlaqə', count: leads.filter(l => l.status === 'CONTACTED').length, color: '#f59e0b' },
-        { status: 'Keyfiyyetli', count: leads.filter(l => l.status === 'QUALIFIED').length, color: '#8b5cf6' },
-        { status: 'Təklif', count: leads.filter(l => l.status === 'PROPOSAL').length, color: '#06b6d4' },
-        { status: 'Danışıq', count: leads.filter(l => l.status === 'NEGOTIATION').length, color: '#f97316' },
-        { status: 'Qazanan', count: leads.filter(l => l.status === 'WON').length, color: '#10b981' },
-        { status: 'İtirilib', count: leads.filter(l => l.status === 'LOST').length, color: '#ef4444' },
-      ]
+      const statusLabels = { NEW: 'Yeni', CONTACTED: 'Əlaqə', QUALIFIED: 'Keyfiyyətli', PROPOSAL: 'Təklif', NEGOTIATION: 'Danışıq', WON: 'Qazanan', LOST: 'İtirilib' }
+      const statusColors = { NEW: '#3b82f6', CONTACTED: '#f59e0b', QUALIFIED: '#8b5cf6', PROPOSAL: '#06b6d4', NEGOTIATION: '#f97316', WON: '#10b981', LOST: '#ef4444' }
+      const pipelineData = (d.pipeline || []).map(p => ({
+        status: statusLabels[p.status] || p.status,
+        count: p.count,
+        color: statusColors[p.status] || '#94a3b8'
+      }))
 
-      // Monthly revenue (mock data based on actual)
-      const monthlyRevenue = [
-        { month: 'Yan', revenue: Math.random() * 50000 + 20000 },
-        { month: 'Fev', revenue: Math.random() * 50000 + 20000 },
-        { month: 'Mar', revenue: Math.random() * 50000 + 20000 },
-        { month: 'Apr', revenue: Math.random() * 50000 + 20000 },
-      ]
-
-      // Order status distribution
-      const orderStatusData = [
-        { name: 'Gözləyir', value: orders.filter(o => o.status === 'PENDING').length },
-        { name: 'Təsdiqlənib', value: orders.filter(o => o.status === 'CONFIRMED').length },
-        { name: 'İşlənilir', value: orders.filter(o => o.status === 'PROCESSING').length },
-        { name: 'Göndərilib', value: orders.filter(o => o.status === 'SHIPPED').length },
-        { name: 'Çatdırılıb', value: orders.filter(o => o.status === 'DELIVERED').length },
-      ]
-
-      // Sales by category
-      const salesByCategory = [
-        { category: 'Elektrik', value: 120000 },
-        { category: 'Tikinti', value: 85000 },
-        { category: 'Enerji', value: 65000 },
-        { category: 'Sənaye', value: 45000 },
-      ]
-
-      // Top salespeople
-      const topSalespeople = [
-        { name: 'Nihat Huseynov', deals: 12, revenue: 245000 },
-        { name: 'Elvin Memmedov', deals: 8, revenue: 180000 },
-        { name: 'Admin User', deals: 5, revenue: 95000 },
-      ]
+      // Top salespeople from dashboard
+      const topSalespeople = (d.topSalesmen || []).map(s => ({
+        name: s.name,
+        deals: s.count,
+        revenue: 0
+      }))
 
       setStats({
-        totalLeads, newLeads, wonLeads, lostLeads, conversionRate,
-        activeQuotes, acceptedQuotes, totalQuoteValue,
-        pendingOrders, completedOrders, totalOrderValue,
-        paidInvoices, overdueInvoices, totalRevenue, pendingRevenue,
-        pipelineData, monthlyRevenue, orderStatusData, salesByCategory, topSalespeople,
-        totalUsers: users.length
+        totalLeads: overview.totalLeads || 0,
+        newLeads: overview.activeLeads || 0,
+        wonLeads: overview.wonLeads || 0,
+        lostLeads: overview.lostLeads || 0,
+        conversionRate: overview.conversionRate || 0,
+        activeQuotes: overview.pendingQuotes || 0,
+        acceptedQuotes: 0,
+        totalQuoteValue: 0,
+        pendingOrders: overview.activeOrders || 0,
+        completedOrders: 0,
+        totalOrderValue: 0,
+        paidInvoices: overview.paidInvoices || 0,
+        overdueInvoices: 0,
+        totalRevenue: overview.totalRevenue || 0,
+        pendingRevenue: 0,
+        pipelineData,
+        monthlyRevenue: revenueRes.data || [],
+        orderStatusData: [],
+        salesByCategory: (categoryRes.data || []).map(c => ({ category: c.category, value: c.total })),
+        topSalespeople,
+        totalUsers: 0
       })
     } catch (err) {
       console.error('Fetch error:', err)
@@ -152,7 +115,7 @@ export default function Reports() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -207,7 +170,7 @@ export default function Reports() {
       </div>
 
       {/* Charts Row 1 */}
-      <div className="grid grid-cols-3 gap-5 mb-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
         {/* Revenue Trend */}
         <Card className="col-span-2 p-6">
           <div className="flex items-center justify-between mb-6">
@@ -263,7 +226,7 @@ export default function Reports() {
       </div>
 
       {/* Charts Row 2 */}
-      <div className="grid grid-cols-3 gap-5 mb-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
         {/* Pipeline */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold text-slate-800 mb-6">Lead Pipeline</h3>
@@ -329,7 +292,7 @@ export default function Reports() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <Card className="p-6">
           <h3 className="text-lg font-semibold text-slate-800 mb-4">Lead Çevrilmə</h3>
           <div className="flex items-center justify-center mb-4">

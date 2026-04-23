@@ -1,26 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const { auth } = require('../middleware/auth');
-const { body, param, validationResult } = require('express-validator');
-
-const prisma = new PrismaClient();
+const prisma = require('../utils/prisma');
+const { auth, authorize } = require('../middleware/auth');
+const { body, param } = require('express-validator');
+const validate = require('../middleware/validate');
+const activityLogger = require('../middleware/activityLogger');
+const { paginate, paginatedResponse } = require('../utils/pagination');
 
 const VALID_STATUSES = ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED'];
 
-// Validation middleware
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
-  }
-  next();
-};
-
-// GET /api/invoices - List all invoices
+// GET /api/invoices - List all invoices (paginated)
 router.get('/', auth, async (req, res) => {
   try {
     const { status, search } = req.query;
+    const { page, limit, skip } = paginate(req.query);
     const where = {};
 
     if (status) where.status = status;
@@ -31,19 +24,24 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
-    const invoices = await prisma.invoice.findMany({
-      where,
-      include: {
-        order: {
-          include: {
-            account: true,
-            contact: true
+    const [invoices, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where,
+        include: {
+          order: {
+            include: {
+              account: true,
+              contact: true
+            }
           }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(invoices);
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.invoice.count({ where })
+    ]);
+    res.json(paginatedResponse(invoices, total, page, limit));
   } catch (err) {
     console.error('GET /api/invoices error:', err);
     res.status(500).json({ error: 'Failed to fetch invoices' });
@@ -81,11 +79,12 @@ router.get('/:id',
 // POST /api/invoices - Create invoice
 router.post('/',
   auth,
+  activityLogger('Invoice', 'CREATE'),
   body('orderId').isInt().withMessage('Order ID is required'),
   validate,
   async (req, res) => {
     try {
-      const { orderId, ...invoiceData } = req.body;
+      const { orderId, notes, dueDate } = req.body;
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
@@ -94,12 +93,12 @@ router.post('/',
 
       if (!order) return res.status(404).json({ error: 'Order not found' });
 
-      const count = await prisma.invoice.count();
-      const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}-${count + 1}`;
+      const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
       const invoice = await prisma.invoice.create({
         data: {
-          ...invoiceData,
+          notes,
+          dueDate: dueDate ? new Date(dueDate) : null,
           invoiceNumber,
           orderId,
           subtotal: order.subtotal,
@@ -122,14 +121,16 @@ router.post('/',
 // PUT /api/invoices/:id - Update invoice
 router.put('/:id',
   auth,
+  activityLogger('Invoice', 'UPDATE'),
   param('id').isInt().withMessage('ID must be a number'),
   body('status').optional().isIn(VALID_STATUSES),
   validate,
   async (req, res) => {
     try {
+      const { status, notes, dueDate } = req.body;
       const invoice = await prisma.invoice.update({
         where: { id: parseInt(req.params.id) },
-        data: req.body
+        data: { status, notes, dueDate }
       });
       res.json(invoice);
     } catch (err) {

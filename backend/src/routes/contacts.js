@@ -1,24 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const { auth } = require('../middleware/auth');
-const { body, param, validationResult } = require('express-validator');
+const prisma = require('../utils/prisma');
+const { auth, authorize } = require('../middleware/auth');
+const { body, param } = require('express-validator');
+const validate = require('../middleware/validate');
+const activityLogger = require('../middleware/activityLogger');
+const { paginate, paginatedResponse } = require('../utils/pagination');
 
-const prisma = new PrismaClient();
-
-// Validation middleware
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
-  }
-  next();
-};
-
-// GET /api/contacts - List all contacts
+// GET /api/contacts - List all contacts (paginated)
 router.get('/', auth, async (req, res) => {
   try {
     const { accountId, search } = req.query;
+    const { page, limit, skip } = paginate(req.query);
     const where = {};
 
     if (accountId) where.accountId = parseInt(accountId);
@@ -30,12 +23,17 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
-    const contacts = await prisma.contact.findMany({
-      where,
-      include: { account: true },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(contacts);
+    const [contacts, total] = await Promise.all([
+      prisma.contact.findMany({
+        where,
+        include: { account: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.contact.count({ where })
+    ]);
+    res.json(paginatedResponse(contacts, total, page, limit));
   } catch (err) {
     console.error('GET /api/contacts error:', err);
     res.status(500).json({ error: 'Failed to fetch contacts' });
@@ -65,6 +63,7 @@ router.get('/:id',
 // POST /api/contacts - Create contact
 router.post('/',
   auth,
+  activityLogger('Contact', 'CREATE'),
   body('firstName').notEmpty().withMessage('First name is required'),
   body('lastName').notEmpty().withMessage('Last name is required'),
   body('email').optional().isEmail().withMessage('Invalid email'),
@@ -72,7 +71,10 @@ router.post('/',
   validate,
   async (req, res) => {
     try {
-      const contact = await prisma.contact.create({ data: req.body });
+      const { firstName, lastName, email, phone, position, isPrimary, accountId } = req.body;
+      const contact = await prisma.contact.create({
+        data: { firstName, lastName, email, phone, position, isPrimary, accountId }
+      });
       res.status(201).json(contact);
     } catch (err) {
       console.error('POST /api/contacts error:', err);
@@ -87,15 +89,17 @@ router.post('/',
 // PUT /api/contacts/:id - Update contact
 router.put('/:id',
   auth,
+  activityLogger('Contact', 'UPDATE'),
   param('id').isInt().withMessage('ID must be a number'),
   body('email').optional().isEmail().withMessage('Invalid email'),
   body('accountId').optional().isInt().withMessage('Account ID must be a number'),
   validate,
   async (req, res) => {
     try {
+      const { firstName, lastName, email, phone, position, isPrimary, accountId } = req.body;
       const contact = await prisma.contact.update({
         where: { id: parseInt(req.params.id) },
-        data: req.body
+        data: { firstName, lastName, email, phone, position, isPrimary, accountId }
       });
       res.json(contact);
     } catch (err) {
@@ -114,6 +118,8 @@ router.put('/:id',
 // DELETE /api/contacts/:id - Delete contact
 router.delete('/:id',
   auth,
+  authorize('ADMIN', 'MANAGER'),
+  activityLogger('Contact', 'DELETE'),
   param('id').isInt().withMessage('ID must be a number'),
   validate,
   async (req, res) => {

@@ -1,26 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const { auth } = require('../middleware/auth');
-const { body, param, validationResult } = require('express-validator');
-
-const prisma = new PrismaClient();
+const prisma = require('../utils/prisma');
+const { auth, authorize } = require('../middleware/auth');
+const { body, param } = require('express-validator');
+const validate = require('../middleware/validate');
+const activityLogger = require('../middleware/activityLogger');
+const { paginate, paginatedResponse } = require('../utils/pagination');
 
 const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
 
-// Validation middleware
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
-  }
-  next();
-};
-
-// GET /api/orders - List all orders
+// GET /api/orders - List all orders (paginated)
 router.get('/', auth, async (req, res) => {
   try {
     const { status, search } = req.query;
+    const { page, limit, skip } = paginate(req.query);
     const where = {};
 
     if (status) where.status = status;
@@ -31,18 +24,23 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
-    const orders = await prisma.order.findMany({
-      where,
-      include: {
-        account: true,
-        contact: true,
-        user: { select: { id: true, firstName: true, lastName: true } },
-        items: { include: { product: true } },
-        invoices: true
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(orders);
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          account: true,
+          contact: true,
+          user: { select: { id: true, firstName: true, lastName: true } },
+          items: { include: { product: true } },
+          invoices: true
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.order.count({ where })
+    ]);
+    res.json(paginatedResponse(orders, total, page, limit));
   } catch (err) {
     console.error('GET /api/orders error:', err);
     res.status(500).json({ error: 'Failed to fetch orders' });
@@ -79,6 +77,7 @@ router.get('/:id',
 // POST /api/orders - Create order
 router.post('/',
   auth,
+  activityLogger('Order', 'CREATE'),
   body('accountId').isInt().withMessage('Account ID is required'),
   body('status').optional().isIn(VALID_STATUSES),
   validate,
@@ -97,8 +96,7 @@ router.post('/',
       const subtotal = calculatedItems.reduce((sum, item) => sum + item.total, 0);
       const taxAmount = subtotal * (orderData.taxRate || 0);
 
-      const count = await prisma.order.count();
-      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${count + 1}`;
+      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
       const order = await prisma.order.create({
         data: {
@@ -131,6 +129,8 @@ router.post('/',
 // PUT /api/orders/:id - Update order
 router.put('/:id',
   auth,
+  authorize('ADMIN', 'MANAGER'),
+  activityLogger('Order', 'UPDATE'),
   param('id').isInt().withMessage('ID must be a number'),
   body('status').optional().isIn(VALID_STATUSES),
   validate,
@@ -139,7 +139,6 @@ router.put('/:id',
       const { items, ...orderData } = req.body;
 
       if (items) {
-        await prisma.orderItem.deleteMany({ where: { orderId: parseInt(req.params.id) } });
         const calculatedItems = items.map(item => ({
           ...item,
           total: item.quantity * item.unitPrice
@@ -147,21 +146,24 @@ router.put('/:id',
         const subtotal = calculatedItems.reduce((sum, item) => sum + item.total, 0);
         const taxAmount = subtotal * (orderData.taxRate || 0);
 
-        const order = await prisma.order.update({
-          where: { id: parseInt(req.params.id) },
-          data: {
-            ...orderData,
-            subtotal,
-            taxAmount,
-            total: subtotal + taxAmount,
-            items: {
-              create: calculatedItems
+        const order = await prisma.$transaction(async (tx) => {
+          await tx.orderItem.deleteMany({ where: { orderId: parseInt(req.params.id) } });
+          return tx.order.update({
+            where: { id: parseInt(req.params.id) },
+            data: {
+              ...orderData,
+              subtotal,
+              taxAmount,
+              total: subtotal + taxAmount,
+              items: {
+                create: calculatedItems
+              }
+            },
+            include: {
+              items: { include: { product: true } },
+              account: true
             }
-          },
-          include: {
-            items: { include: { product: true } },
-            account: true
-          }
+          });
         });
         res.json(order);
       } else {

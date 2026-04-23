@@ -1,26 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const { auth } = require('../middleware/auth');
-const { body, param, validationResult } = require('express-validator');
-
-const prisma = new PrismaClient();
+const prisma = require('../utils/prisma');
+const { auth, authorize } = require('../middleware/auth');
+const { body, param } = require('express-validator');
+const validate = require('../middleware/validate');
+const activityLogger = require('../middleware/activityLogger');
+const { paginate, paginatedResponse } = require('../utils/pagination');
 
 const VALID_STATUSES = ['NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
 
-// Validation middleware
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
-  }
-  next();
-};
-
-// GET /api/leads - List all leads
+// GET /api/leads - List all leads (paginated)
 router.get('/', auth, async (req, res) => {
   try {
     const { status, userId, search } = req.query;
+    const { page, limit, skip } = paginate(req.query);
     const where = {};
 
     if (status) where.status = status;
@@ -32,15 +25,20 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
-    const leads = await prisma.lead.findMany({
-      where,
-      include: {
-        account: true,
-        user: { select: { id: true, firstName: true, lastName: true } }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(leads);
+    const [leads, total] = await Promise.all([
+      prisma.lead.findMany({
+        where,
+        include: {
+          account: true,
+          user: { select: { id: true, firstName: true, lastName: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.lead.count({ where })
+    ]);
+    res.json(paginatedResponse(leads, total, page, limit));
   } catch (err) {
     console.error('GET /api/leads error:', err);
     res.status(500).json({ error: 'Failed to fetch leads' });
@@ -74,6 +72,7 @@ router.get('/:id',
 // POST /api/leads - Create lead
 router.post('/',
   auth,
+  activityLogger('Lead', 'CREATE'),
   body('title').notEmpty().withMessage('Title is required'),
   body('status').optional().isIn(VALID_STATUSES),
   body('value').optional().isFloat({ min: 0 }).withMessage('Value must be a positive number'),
@@ -81,8 +80,9 @@ router.post('/',
   validate,
   async (req, res) => {
     try {
+      const { title, description, value, status, source, accountId } = req.body;
       const lead = await prisma.lead.create({
-        data: { ...req.body, userId: req.user.id },
+        data: { title, description, value, status, source, accountId, userId: req.user.id },
         include: { account: true, user: true }
       });
       res.status(201).json(lead);
@@ -99,6 +99,7 @@ router.post('/',
 // PUT /api/leads/:id - Update lead
 router.put('/:id',
   auth,
+  activityLogger('Lead', 'UPDATE'),
   param('id').isInt().withMessage('ID must be a number'),
   body('status').optional().isIn(VALID_STATUSES),
   body('value').optional().isFloat({ min: 0 }).withMessage('Value must be a positive number'),
@@ -106,9 +107,10 @@ router.put('/:id',
   validate,
   async (req, res) => {
     try {
+      const { title, description, value, status, source, accountId } = req.body;
       const lead = await prisma.lead.update({
         where: { id: parseInt(req.params.id) },
-        data: req.body,
+        data: { title, description, value, status, source, accountId },
         include: { account: true, user: true }
       });
       res.json(lead);
@@ -128,6 +130,8 @@ router.put('/:id',
 // DELETE /api/leads/:id - Delete lead
 router.delete('/:id',
   auth,
+  authorize('ADMIN', 'MANAGER'),
+  activityLogger('Lead', 'DELETE'),
   param('id').isInt().withMessage('ID must be a number'),
   validate,
   async (req, res) => {

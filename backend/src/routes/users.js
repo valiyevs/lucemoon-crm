@@ -1,29 +1,38 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../utils/prisma');
 const { auth, authorize } = require('../middleware/auth');
-const { body, param, validationResult } = require('express-validator');
-
-const prisma = new PrismaClient();
+const { body, param } = require('express-validator');
+const validate = require('../middleware/validate');
+const { paginate, paginatedResponse } = require('../utils/pagination');
 
 const VALID_ROLES = ['ADMIN', 'MANAGER', 'SALESMAN'];
 
-// Validation middleware
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
-  }
-  next();
-};
-
-// GET /api/users - List all users
-router.get('/', auth, async (req, res) => {
+// GET /api/users - List all users (Admin only, paginated)
+router.get('/', auth, authorize('ADMIN'), async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
-      select: { id: true, email: true, firstName: true, lastName: true, role: true, isActive: true, createdAt: true }
-    });
-    res.json(users);
+    const { search } = req.query;
+    const { page, limit, skip } = paginate(req.query);
+    const where = {};
+
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: { id: true, email: true, firstName: true, lastName: true, role: true, isActive: true, createdAt: true },
+        skip,
+        take: limit
+      }),
+      prisma.user.count({ where })
+    ]);
+    res.json(paginatedResponse(users, total, page, limit));
   } catch (err) {
     console.error('GET /api/users error:', err);
     res.status(500).json({ error: 'Failed to fetch users' });

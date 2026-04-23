@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
-import { Card, Button, Input, Badge } from '../components/ui'
+import { Card, Button, Input, Badge, Pagination, Alert } from '../components/ui'
+import { SkeletonGrid } from '../components/Skeleton'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useDebounce } from '../hooks/useDebounce'
 import { Plus, Search, Package, Tag, AlertTriangle, TrendingDown } from 'lucide-react'
 import api from '../api'
 
 export default function Products() {
+  const navigate = useNavigate()
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -14,14 +19,22 @@ export default function Products() {
   const [formData, setFormData] = useState({ sku: '', name: '', description: '', category: '', unit: 'ədəd', price: '', costPrice: '', stock: 0 })
   const [error, setError] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const debouncedSearch = useDebounce(searchTerm)
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [page, debouncedSearch, selectedCategory])
 
   const fetchData = async () => {
     try {
       setError(null)
-      const [productsRes, categoriesRes] = await Promise.all([api.get('/products'), api.get('/products/categories')])
-      setProducts(productsRes.data || [])
+      const params = new URLSearchParams({ page, limit: 20 })
+      if (debouncedSearch) params.append('search', debouncedSearch)
+      if (selectedCategory) params.append('category', selectedCategory)
+      const [productsRes, categoriesRes] = await Promise.all([api.get(`/products?${params}`), api.get('/products/categories')])
+      setProducts(productsRes.data.data || [])
+      setTotalPages(productsRes.data.pagination?.totalPages || 1)
       setCategories(categoriesRes.data || [])
     } catch (err) {
       console.error('Fetch error:', err)
@@ -54,25 +67,22 @@ export default function Products() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Bu məhsulu silmək istəyirsiniz?')) return
+  const handleDelete = async () => {
+    if (!confirmDelete) return
     try {
-      setDeletingId(id)
-      await api.delete(`/products/${id}`)
+      setDeletingId(confirmDelete)
+      await api.delete(`/products/${confirmDelete}`)
+      setConfirmDelete(null)
       fetchData()
     } catch (err) {
       console.error('Delete error:', err)
-      alert('Silinə bilmədi: ' + (err.message || 'Xəta baş verdi'))
+      setError('Silinə bilmədi: ' + (err.message || 'Xəta baş verdi'))
     } finally {
       setDeletingId(null)
     }
   }
 
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.sku.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = !selectedCategory || p.category === selectedCategory
-    return matchesSearch && matchesCategory
-  })
+  const filteredProducts = products
 
   const formatCurrency = (value) => `${value.toLocaleString('az-AZ')} ₼`
 
@@ -97,31 +107,31 @@ export default function Products() {
 
       {/* Error Alert */}
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
-        </div>
+        <Alert variant="danger" onClose={() => setError(null)}>{error}</Alert>
       )}
 
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-20">
-          <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      )}
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleDelete}
+        title="Məhsulu sil"
+        message="Bu məhsulu silmək istəyirsiniz? Bu əməliyyat geri alına bilməz."
+        loading={!!deletingId}
+      />
 
       {/* New Product Form */}
       {showForm && (
         <Card className="mb-6 p-6 border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Yeni Məhsul Əlavə Et</h2>
           <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Input label="SKU" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} placeholder="CABLE-001" required />
               <Input label="Ad" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="NYM 3x2.5 mm²" required />
               <Input label="Kateqoriya" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Kablolar" required />
               <Input label="Vahid" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} placeholder="ədəd, metr" />
             </div>
-            <div className="grid grid-cols-4 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
               <Input label="Satış qiyməti (₼)" type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} placeholder="0.00" required />
               <Input label="Maya qiyməti (₼)" type="number" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: e.target.value})} placeholder="0.00" />
               <Input label="Anbar sayı" type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} placeholder="0" />
@@ -168,7 +178,9 @@ export default function Products() {
       </Card>
 
       {/* Products Grid */}
-      {filteredProducts.length === 0 ? (
+      {loading ? (
+        <SkeletonGrid count={8} />
+      ) : filteredProducts.length === 0 ? (
         <Card className="p-12 text-center">
           <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Package className="text-slate-400" size={32} />
@@ -178,15 +190,15 @@ export default function Products() {
           <Button onClick={() => setShowForm(true)} icon={Plus}>Yeni Məhsul</Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {filteredProducts.map(product => {
             const stockStatus = getStockStatus(product.stock)
             const profitMargin = product.costPrice ? ((product.price - product.costPrice) / product.price * 100).toFixed(0) : null
 
             return (
-              <Card key={product.id} hover className="p-5 group relative">
+              <Card key={product.id} hover className="p-5 group relative cursor-pointer" onClick={() => navigate(`/products/${product.id}`)}>
                 <button
-                  onClick={() => handleDelete(product.id)}
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(product.id) }}
                   disabled={deletingId === product.id}
                   className="absolute top-3 right-3 p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 disabled:opacity-50 opacity-0 group-hover:opacity-100 transition"
                 >
@@ -234,6 +246,8 @@ export default function Products() {
           })}
         </div>
       )}
+
+      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
     </Layout>
   )
 }
